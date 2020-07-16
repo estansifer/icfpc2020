@@ -1,0 +1,25 @@
+# Assuming we start with master branch checked out
+
+# Commit any changes from working directory
+git commit
+
+# Get latest changes (do we want --all option?)
+git pull
+
+# Checkout "submission" branch to working directory
+git checkout submission
+
+# Merge from "master" to "submission"
+git merge master
+
+# Check things are okay
+git status
+
+# Commit merge changes from working directory to submission branch
+git commit
+
+# Push all changes upstream
+git push --all
+
+# Return working directory back to "master" branch
+git checkout master
