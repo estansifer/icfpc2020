@@ -30,7 +30,7 @@ def addgridlines(image, spacing, color = [64, 64, 64]):
         if y > 0:
             image[:, yM - y] = color
 
-def make_canvas(xyss):
+def get_extent(xyss):
     xm = 0
     xM = 0
     ym = 0
@@ -45,7 +45,10 @@ def make_canvas(xyss):
 
     xM = max(xM, -xm)
     yM = max(yM, -ym)
+    return xm, xM, ym, yM
 
+def make_canvas(xyss):
+    xm, xM, ym, yM = get_extent(xyss)
     canvass = [None] * len(xyss)
     for i in range(len(xyss)):
         canvas = [[0] * (2 * yM + 1) for j in range(2 * xM + 1)]
@@ -58,8 +61,7 @@ def make_canvas(xyss):
 
     return canvass
 
-def save_with_imageio(xyss, outfile = '../images/out.png', factor = 8):
-    import imageio
+def make_image(xyss):
     import numpy as np
 
     c = np.array(make_canvas(xyss), dtype = bool)
@@ -85,10 +87,45 @@ def save_with_imageio(xyss, outfile = '../images/out.png', factor = 8):
         image = np.sum(np.where(c, colors7[:k], 0), axis = 0, dtype = np.uint8)
 
     image = image.transpose((1, 0, 2))
+    return image
+
+def save_with_imageio(xyss, outfile = '../images/out.png', factor = 8):
+    import imageio
+
+    image = make_image(xyss)
     image = zoom(image, factor)
     addgridlines(image, factor * 10)
 
     imageio.imwrite(outfile, image)
+
+class GalaxyPadUI:
+    def __init__(self, image=0):
+        self.im = image
+        self.cid = self.im.figure.canvas.mpl_connect('button_press_event', self)
+
+    def __call__(self, event):
+        coord = (int(event.xdata), int(event.ydata))
+        print('click', coord)
+        '''
+        image = make_image(xyss)
+        xm, xM, ym, yM = get_extent(xyss)
+        self.im.set_data(image)
+        self.im.set_extent([-xM-0.5, xM+0.5, -yM-0.5, yM+0.5])
+        plt.draw()
+        '''
+
+def plot_with_matplotlib(xyss):
+    import matplotlib.pyplot as plt
+
+    image = make_image(xyss)
+    fig, ax = plt.subplots()
+    xm, xM, ym, yM = get_extent(xyss)
+    im = ax.imshow(image, interpolation='none',
+                   origin='lower',
+                   extent=[-xM-0.5, xM+0.5, -yM-0.5, yM+0.5])
+    galaxy_pad = GalaxyPadUI(im)
+    plt.show()
+    return galaxy_pad
 
 def no_render(xyss):
     print("Cannot draw image!")
