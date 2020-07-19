@@ -10,7 +10,7 @@ def zoom(image, factor = 4):
     import numpy as np
     return np.kron(image, np.ones((factor, factor, 1), dtype = np.uint8))
 
-def addgridlines(image, spacing, color = [128, 128, 128]):
+def addgridlines(image, spacing, color = [64, 64, 64]):
 
     xM = image.shape[0] // 2
     yM = image.shape[1] // 2
@@ -73,10 +73,9 @@ def save_with_imageio(xyss, outfile = '../images/out.png', factor = 8):
         for i in range(k):
             image[:, :, i] = c[i] * 255
     else:
-        image[:, :, :] = c[0, :, :, None] * 128
+        image[:, :, :] = c[0, :, :, None] * 194
         for i in range(3):
-            image[:, :, i] = c[i + 1] * 255
-
+            image[:, :, i] = np.maximum(image[:, :, i], c[i + 1] * 255)
 
     image = image.transpose((1, 0, 2))
     image = zoom(image, factor)
@@ -165,8 +164,19 @@ def test():
         save_with_imageio(xyss, imagefile)
         display_image_with_feh(imagefile)
 
-    click = interact(g, render)
-    click()
+    interact(g, render)
+
+def read_saved_states(infile = '../input/states'):
+    states = []
+    with open(infile, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if len(line) == 0:
+                continue
+
+            name, value = line.split('|')
+            states.append((name.strip(), value.strip()))
+    return states
 
 def run():
     g = galaxy.galaxy()
@@ -176,11 +186,13 @@ def run():
         save_with_imageio(xyss, imagefile)
         display_image_with_feh(imagefile)
 
+    saved_states = read_saved_states()
+
     state = ()
     xyss = []
 
     while True:
-        prompt = '"<x> <y>" or (q)uit or (r)eset or show (s)tate or show (c)oordinates or (d)isplay image:  '
+        prompt = '"<x> <y>" or (q)uit or (r)eset or show (s)tate or (e)dit state or show (c)oordinates or (d)isplay image:  '
         try:
             result = input(prompt).strip().lower()
         except EOFError:
@@ -212,12 +224,38 @@ def run():
             print("State:", ops.tostring(ops.make_expression(state)))
             continue
 
+        if result[0] == 'e':
+            print("Saved states:")
+            for i in range(len(saved_states)):
+                name, value = saved_states[i]
+                print("    ({})    ".format(i), name, "    ", value)
+            print("    (c)ustom")
+
+            cmd = input("Select state, or (c)ustom:  ").strip().lower()
+            if len(cmd) == 0:
+                print("aborted")
+                continue
+
+            if cmd[0] == 'c':
+                value = input("Enter new state:  ").strip().lower()
+            else:
+                try:
+                    value = saved_states[int(cmd)][1]
+                except:
+                    print("Unknown input")
+                    continue
+
+            state = ops.parse_list_expr(value)
+            continue
 
         x_, y_ = result.split()
         x = int(x_)
         y = int(y_)
 
-        state, xyss = interact(g, render, no_send, state, (x, y))
+        try:
+            state, xyss = interact(g, render, no_send, state, (x, y))
+        except:
+            print("Encountered exception during interaction!")
 
         s = ops.tostring(ops.make_expression(state))
         if len(s) < 100:

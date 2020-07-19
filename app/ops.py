@@ -220,6 +220,52 @@ def serialize_strict_list(l, terms):
                 break
         terms.append(')')
 
+def parse_list_expr(s):
+    s = s.strip()
+    i = [0]
+
+    def parse_int():
+        j = i[0]
+        while not (s[j] in [',', ')']):
+            j += 1
+        val = int(s[i[0] : j].strip())
+        i[0] = j
+        return val
+
+    def parse_tail():
+        while s[i[0]] == ' ':
+            i[0] += 1
+
+        if s[i[0]] == ')':
+            i[0] += 1
+            return ()
+
+        o = parse_obj()
+
+        while s[i[0]] == ' ':
+            i[0] += 1
+
+        if s[i[0]] == ',':
+            i[0] += 1
+            return (o, parse_tail())
+        else:
+            i[0] += 1
+            return o
+
+
+    def parse_list():
+        i[0] += 1
+        return parse_tail()
+
+    def parse_obj():
+        i0 = i[0]
+        if s[i[0]] == '(':
+            return parse_list()
+        else:
+            return parse_int()
+
+    return parse_obj()
+
 def tostring(expr):
     ap = 'ap'
     terms = []
