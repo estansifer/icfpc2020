@@ -90,41 +90,34 @@ def make_image(xyss):
     image = image.transpose((1, 0, 2))
     return image
 
-def save_with_imageio(xyss, outfile = '../images/out.png', factor = 8):
+def save_with_imageio(image, outfile = '../images/out.png', factor = 8):
     import imageio
 
-    image = make_image(xyss)
     image = zoom(image, factor)
     addgridlines(image, factor * 10)
 
     imageio.imwrite(outfile, image)
 
 class GalaxyPadUI:
-    def __init__(self, image=0):
+    def __init__(self, image, on_click):
         self.im = image
         self.cid = self.im.figure.canvas.mpl_connect('button_press_event', self)
+        self.on_click = on_click
 
     def __call__(self, event):
         coord = (int(event.xdata), int(event.ydata))
+        self.on_click(*coord)
         print('click', coord)
-        '''
-        image = make_image(xyss)
-        xm, xM, ym, yM = get_extent(xyss)
-        self.im.set_data(image)
-        self.im.set_extent([-xM-0.5, xM+0.5, -yM-0.5, yM+0.5])
-        plt.draw()
-        '''
 
-def plot_with_matplotlib(xyss):
+def plot_with_matplotlib(image, xyss, on_click):
     import matplotlib.pyplot as plt
 
-    image = make_image(xyss)
     fig, ax = plt.subplots()
     xm, xM, ym, yM = get_extent(xyss)
     im = ax.imshow(image, interpolation='none',
                    origin='lower',
                    extent=[-xM-0.5, xM+0.5, -yM-0.5, yM+0.5])
-    galaxy_pad = GalaxyPadUI(im)
+    galaxy_pad = GalaxyPadUI(im, on_click)
     plt.show()
     return galaxy_pad
 
@@ -243,22 +236,24 @@ class Runner:
         self.moviefile = None
         self.movieframe = None
         self.lastimagefile = self.imagefile
+        self.lastimage = None
         self.inmovie = False
         self.state = [()]
         self.xyss = []
 
     def renderer(self, xyss):
+        self.xyss = xyss
+        image = make_image(xyss)
+        self.lastimage = image
         if self.inmovie:
             f = self.moviefile.format(self.movieframe)
-            save_with_imageio(xyss, f)
             self.lastimagefile = f
             self.movieframe += 1
         else:
-            save_with_imageio(xyss, self.imagefile)
             self.lastimagefile = self.imagefile
 
+        save_with_imageio(image, self.lastimagefile)
         self.display()
-        self.xyss = xyss
 
     def sender(self, data):
         print("Sending data to server:", ops.tostring(data))
@@ -297,6 +292,8 @@ class Runner:
                 self.movie()
             elif c == 'u':
                 self.undo()
+            elif result == '0':
+                self.click(0, 0)
             elif c in '-0123456789':
                 try:
                     x_, y_ = result.split()
@@ -313,7 +310,8 @@ class Runner:
         print('bye')
 
     def display(self):
-        display_image_with_feh(self.lastimagefile)
+        plot_with_matplotlib(self.lastimage, self.xyss, self.click)
+        # display_image_with_feh(self.lastimagefile)
 
     def show_state(self, full = False):
         print("State:", trim_state(self.state[-1], full))
