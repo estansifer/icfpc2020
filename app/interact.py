@@ -69,23 +69,28 @@ def make_image(xyss):
     k, x, y = c.shape
     c = c[:, :, :, None]
 
-    colors3 = np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255]], dtype = np.uint8)
-    colors3 = colors3[:, None, None, :]
-    colors5 = np.array([[255, 0, 0], [0, 170, 0], [0, 0, 170], [0, 85, 0], [0, 0, 85]], dtype = np.uint8)
-    colors5 = colors5[:, None, None, :]
-    colors7 = np.array([[255, 0, 0], [0, 144, 0], [0, 0, 144], [0, 72, 0], [0, 0, 72], [0, 36, 0], [0, 0, 36]], dtype = np.uint8)
-    colors7 = colors7[:, None, None, :]
+    colors4  = np.array([[192, 0, 0], [63, 0, 0], [0, 255, 0], [0, 0, 255]], dtype = np.uint8)
+    colors4  = colors4[:, None, None, :]
+    colors6  = np.array([[192, 0, 0], [63, 0, 0], [0, 170, 0], [0, 0, 170], [0, 85, 0], [0, 0, 85]], dtype = np.uint8)
+    colors6  = colors6[:, None, None, :]
+    colors8  = np.array([[192, 0, 0], [63, 0, 0], [0, 144, 0], [0, 0, 144], [0, 72, 0], [0, 0, 72], [0, 36, 0], [0, 0, 36]], dtype = np.uint8)
+    colors8  = colors8[:, None, None, :]
+    colors10 = np.array([[192, 0, 0], [63, 0, 0], [0, 136, 0], [0, 0, 136], [0, 68, 0], [0, 0, 68], [0, 34, 0], [0, 0, 34], [0, 17, 0], [0, 0, 17]], dtype = np.uint8)
+    colors10 = colors10[:, None, None, :]
 
-    if k > 7:
+    if k > 10:
         print("Too many color channels!", k, "channels")
-        k = 7
+        k = 10
+        c = c[:k]
 
-    if k <= 3:
-        image = np.sum(np.where(c, colors3[:k], 0), axis = 0, dtype = np.uint8)
-    elif k <= 5:
-        image = np.sum(np.where(c, colors5[:k], 0), axis = 0, dtype = np.uint8)
-    elif k <= 7:
-        image = np.sum(np.where(c, colors7[:k], 0), axis = 0, dtype = np.uint8)
+    if k <= 4:
+        image = np.sum(np.where(c, colors4[:k], 0), axis = 0, dtype = np.uint8)
+    elif k <= 6:
+        image = np.sum(np.where(c, colors6[:k], 0), axis = 0, dtype = np.uint8)
+    elif k <= 8:
+        image = np.sum(np.where(c, colors8[:k], 0), axis = 0, dtype = np.uint8)
+    elif k <= 10:
+        image = np.sum(np.where(c, colors10[:k], 0), axis = 0, dtype = np.uint8)
 
     image = image.transpose((1, 0, 2))
     return image
