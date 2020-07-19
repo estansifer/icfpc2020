@@ -61,13 +61,22 @@ def save_with_imageio(xyss, outfile = '../images/out.png', factor = 8):
 
     k, x, y = c.shape
 
-    if k > 3:
+    if k > 4:
         print("Too many color channels!", k, "channels")
-        k = 3
+        k = 4
 
     image = np.zeros((x, y, 3), dtype = np.uint8)
-    for i in range(k):
-        image[:, :, i] = c[i] * 255
+
+    if k == 1:
+        image[:, :, :] = c[0, :, :, None] * 255
+    elif k <= 3:
+        for i in range(k):
+            image[:, :, i] = c[i] * 255
+    else:
+        image[:, :, :] = c[0, :, :, None] * 128
+        for i in range(3):
+            image[:, :, i] = c[i + 1] * 255
+
 
     image = image.transpose((1, 0, 2))
     image = zoom(image, factor)
@@ -99,6 +108,22 @@ def process_xyss(data):
         xyss.append(xys)
     return xyss
 
+def process_xyss_expr(expr):
+    data = expr[0]
+
+    xyss = []
+    while data != ():
+        d = data[0][0]
+        data = data[1][0]
+
+        xys = []
+        while d != ():
+            xy = d[0][0]
+            xys.append((xy[0][0], xy[1][0]))
+            d = d[1][0]
+        xyss.append(xys)
+    return xyss
+
 def interact(protocol, renderer = no_render, sender = no_send, state = None, xy = None):
     if state is None:
         state = ()
@@ -111,21 +136,27 @@ def interact(protocol, renderer = no_render, sender = no_send, state = None, xy 
 
         expr = [[protocol, state], xy]
         ops.reducer.reduce(expr)
+        # result = ops.unmake_expression(expr)
+
+        data = list(expr[0][1][0][1][0][0])
+        expr[0][1][0][1][0][0][:] = [()]
+
         result = ops.unmake_expression(expr)
 
         flag = result[0]
         newstate = result[1][0]
-        data = result[1][1][0]
+        # data = result[1][1][0]
         assert result[1][1][1] == ()
         assert flag in [0, 1]
 
         if flag == 0:
-            xyss = process_xyss(data)
+            xyss = process_xyss_expr(data)
             renderer(xyss)
             return (newstate, xyss)
         else:
             state = newstate
-            xy = send(data)
+            data = ops.unmake_expression(data)
+            xy = sender(data)
 
 def test():
     g = galaxy.galaxy()
