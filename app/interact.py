@@ -53,7 +53,7 @@ def make_canvas(xyss):
 
     return canvass
 
-def save_with_imageio(xyss, outfile = '../images/out.png'):
+def save_with_imageio(xyss, outfile = '../images/out.png', factor = 8):
     import imageio
     import numpy as np
 
@@ -61,14 +61,15 @@ def save_with_imageio(xyss, outfile = '../images/out.png'):
 
     k, x, y = c.shape
 
-    assert k <= 3
+    if k > 3:
+        print("Too many color channels!", k, "channels")
+        k = 3
 
     image = np.zeros((x, y, 3), dtype = np.uint8)
     for i in range(k):
         image[:, :, i] = c[i] * 255
 
     image = image.transpose((1, 0, 2))
-    factor = 8
     image = zoom(image, factor)
     addgridlines(image, factor * 10)
 
@@ -98,12 +99,13 @@ def process_xyss(data):
         xyss.append(xys)
     return xyss
 
-def interact(protocol, renderer = no_render, sender = no_send):
-    def click(state = None, xy = None):
-        if state is None:
-            state = ()
-        if xy is None:
-            xy = (0, 0)
+def interact(protocol, renderer = no_render, sender = no_send, state = None, xy = None):
+    if state is None:
+        state = ()
+    if xy is None:
+        xy = (0, 0)
+
+    while True:
         state = ops.make_expression(state)
         xy = ops.make_expression(xy)
 
@@ -118,12 +120,12 @@ def interact(protocol, renderer = no_render, sender = no_send):
         assert flag in [0, 1]
 
         if flag == 0:
-            renderer(process_xyss(data))
-            return newstate
+            xyss = process_xyss(data)
+            renderer(xyss)
+            return (newstate, xyss)
         else:
+            state = newstate
             xy = send(data)
-            return click(newstate, xy)
-    return click
 
 def test():
     g = galaxy.galaxy()
@@ -137,17 +139,17 @@ def test():
 
 def run():
     g = galaxy.galaxy()
+    imagefile = '../images/out.png'
+
     def render(xyss):
-        imagefile = '../images/out.png'
         save_with_imageio(xyss, imagefile)
         display_image_with_feh(imagefile)
 
-    click = interact(g, render)
-
     state = ()
+    xyss = []
 
     while True:
-        prompt = 'Enter "<x> <y>" or (q)uit or (r)eset:  '
+        prompt = '"<x> <y>" or (q)uit or (r)eset or show (s)tate or show (c)oordinates or (d)isplay image:  '
         try:
             result = input(prompt).strip().lower()
         except EOFError:
@@ -166,16 +168,31 @@ def run():
             state = ()
             continue
 
+        if result[0] == 'c':
+            for xys in xyss:
+                print(xys)
+            continue
+
+        if result[0] == 'd':
+            display_image_with_feh(imagefile)
+            continue
+
+        if result[0] == 's':
+            print("State:", ops.tostring(ops.make_expression(state)))
+            continue
+
+
         x_, y_ = result.split()
         x = int(x_)
         y = int(y_)
 
-        state = click(state, (x, y))
+        state, xyss = interact(g, render, no_send, state, (x, y))
+
         s = ops.tostring(ops.make_expression(state))
-        if len(s) < 600:
-            print("Current state:", s)
+        if len(s) < 100:
+            print("State:", s)
         else:
-            print("Current state [", str(len(s)), "characters]:", s[:250], ' ... ', s[-250:])
+            print("State [", str(len(s)), "characters]:", s[:50], ' ... ', s[-50:])
 
 if __name__ == "__main__":
     run()
