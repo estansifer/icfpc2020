@@ -1,6 +1,6 @@
 import ops
 
-def read_galaxy(infile = '../input/galaxy.txt'):
+def read_galaxy_txt(infile = '../input/galaxy.txt'):
     symbols = {}
     with open(infile, 'r') as f:
         for line in f:
@@ -14,6 +14,13 @@ def read_galaxy(infile = '../input/galaxy.txt'):
     for s in symbols:
         ops.assign_symbol_references(symbols[s], symbols)
     return symbols
+
+def galaxy():
+    symbols = read_galaxy_txt()
+    return symbols['galaxy']
+
+
+#### Various testing stuff
 
 
 def print_expression(e, M = 185):
@@ -41,37 +48,17 @@ def reduce_all_symbols(symbols):
 
     return count
 
-def repeatedly_reduce(symbols, limit = 20):
-    valid = set(symbols.keys())
-
-    for i in range(limit):
-        count = 0
-
-        for s in sorted(list(valid)):
-            text = print_expression(symbols[s])
-            if ops.reducer.reduce(symbols[s]):
-                print(s, text)
-                print('    = ', print_expression(symbols[s]))
-                count += 1
-            else:
-                valid.remove(s)
-
-        print("Number of reductions:", count)
-
-        if count == 0:
-            break
-
 def evaluate_galaxy():
-    symbols = read_galaxy('../input/ap_galaxy.txt')
+    symbols = read_galaxy_txt('../input/ap_galaxy.txt')
 
     # result0 = ap ap galaxy nil ap ap cons 0 0
     s = symbols['result0']
-    print(print_expression(s, 5000))
-    while ops.reducer.reduce(s):
-        print(print_expression(s, 5000))
+    print(ops.tostring(s))
+    ops.reducer.reduce(s)
+    print(ops.tostring(s))
 
 def test():
-    symbols = read_galaxy() #'../input/test.txt')
+    symbols = read_galaxy_txt() #'../input/test.txt')
     d = {
             ':1096' : symbols[':1096'],
             ':1199' : symbols[':1199'],
@@ -79,7 +66,7 @@ def test():
             ':1202' : symbols[':1202']
             }
     print_all_symbols(symbols)
-    repeatedly_reduce(symbols, 1000)
+    reduce_all_symbols(symbols, 1000)
 
 if __name__ == "__main__":
     # test()

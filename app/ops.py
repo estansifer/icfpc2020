@@ -6,6 +6,36 @@ import inspect
 # a Term either an Op or a Variable an integer or a tuple
 # tuple is either (), i.e., nil, or a pair of expressions
 
+# Accepts integers, (), and pairs thereof
+def make_expression(x):
+    if x == ():
+        return [()]
+    elif type(x) is int:
+        return [x]
+    else:
+        assert len(x) == 2
+        return [(make_expression(x[0]), make_expression(x[1]))]
+
+def unmake_expression(x):
+    assert (type(x) is list) and (len(x) == 1)
+    x = x[0]
+    if x == ():
+        return ()
+    elif type(x) is int:
+        return x
+    else:
+        a, b = x
+        return (unmake_expression(a), unmake_expression(b))
+
+def __test(x):
+    print('test:', x)
+    e = make_expression(x)
+    print(e)
+    print(unmake_expression(e))
+
+def ap(x, y):
+    return [x, y]
+
 def reduce1(expr):
     args = []
     parents = []
