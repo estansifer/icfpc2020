@@ -121,7 +121,7 @@ def plot_with_matplotlib(image, xyss, on_click):
     import matplotlib.pyplot as plt
     from pylab import get_current_fig_manager
 
-    matplotlib.use("TkAgg")
+    # matplotlib.use("TkAgg")
     plt.ion()
     fig, ax = plt.subplots()
     xm, xM, ym, yM = get_extent(xyss)
@@ -131,8 +131,8 @@ def plot_with_matplotlib(image, xyss, on_click):
     ax.set_ylim(ax.get_ylim()[::-1])  # flip y-axis
     galaxy_pad = GalaxyPadUI(im, on_click)
     # fix window location
-    thismanager = get_current_fig_manager()
-    thismanager.window.wm_geometry("+100+50")
+    # thismanager = get_current_fig_manager()
+    # thismanager.window.wm_geometry("+100+50")
     plt.show()
 
 def no_render(xyss):
@@ -336,7 +336,11 @@ class Runner:
         print("Saved states:")
         for i in range(len(saved_states)):
             name, value = saved_states[i]
-            print("    ({})    ".format(i), name, "    ", value)
+            if len(value) > 100:
+                value_trim = value[:50] + ' ... ' + value[-50:]
+            else:
+                value_trim = value
+            print("    ({})    ".format(i), name, "    ", value_trim)
         print("    (c)ustom")
 
         cmd = input("Select state, or (c)ustom:  ").strip().lower()
