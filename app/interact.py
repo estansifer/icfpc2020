@@ -1,14 +1,19 @@
 import subprocess
+import requests
+import os
+import os.path
 
 import galaxy
+import modem
 import ops
+import secret
 
 def display_image_with_feh(imagefile):
     subprocess.run(["feh", "-F", imagefile])
 
 def zoom(image, factor = 4):
     import numpy as np
-    return np.kron(image, np.ones((factor, factor, 1), dtype = np.uint8))
+    return np.kron(image, np.ones((factor, factor, 1), dtype = bool))
 
 def addgridlines(image, spacing, color = [64, 64, 64]):
 
@@ -57,25 +62,27 @@ def save_with_imageio(xyss, outfile = '../images/out.png', factor = 8):
     import imageio
     import numpy as np
 
-    c = np.array(make_canvas(xyss), dtype = np.uint8)
-
+    c = np.array(make_canvas(xyss), dtype = bool)
     k, x, y = c.shape
+    c = c[:, :, :, None]
 
-    if k > 4:
+    colors3 = np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255]], dtype = np.uint8)
+    colors3 = colors3[:, None, None, :]
+    colors5 = np.array([[255, 0, 0], [0, 170, 0], [0, 0, 170], [0, 85, 0], [0, 0, 85]], dtype = np.uint8)
+    colors5 = colors5[:, None, None, :]
+    colors7 = np.array([[255, 0, 0], [0, 144, 0], [0, 0, 144], [0, 72, 0], [0, 0, 72], [0, 36, 0], [0, 0, 36]], dtype = np.uint8)
+    colors7 = colors7[:, None, None, :]
+
+    if k > 7:
         print("Too many color channels!", k, "channels")
-        k = 4
+        k = 7
 
-    image = np.zeros((x, y, 3), dtype = np.uint8)
-
-    if k == 1:
-        image[:, :, :] = c[0, :, :, None] * 255
-    elif k <= 3:
-        for i in range(k):
-            image[:, :, i] = c[i] * 255
-    else:
-        image[:, :, :] = c[0, :, :, None] * 194
-        for i in range(3):
-            image[:, :, i] = np.maximum(image[:, :, i], c[i + 1] * 255)
+    if k <= 3:
+        image = np.sum(np.where(c, colors3[:k], 0), axis = 0, dtype = np.uint8)
+    elif k <= 5:
+        image = np.sum(np.where(c, colors5[:k], 0), axis = 0, dtype = np.uint8)
+    elif k <= 7:
+        image = np.sum(np.where(c, colors7[:k], 0), axis = 0, dtype = np.uint8)
 
     image = image.transpose((1, 0, 2))
     image = zoom(image, factor)
@@ -87,6 +94,18 @@ def no_render(xyss):
     print("Cannot draw image!")
     print(ops.tostring(xyss))
     raise RuntimeError()
+
+def send_to_test_server(data):
+    data = ops.unmake_expression(data)
+    data = modem.mod(data)
+
+    test_url = 'https://icfpc2020-api.testkontur.ru/aliens/send?apiKey=' + secret.apikey
+
+    response = requests.post(test_url, data = data)
+    code = response.status_code
+    if code != 200:
+        print("Response code", code)
+    return modem.dem(response.text)
 
 def no_send(data):
     print("Cannot send data to server!")
@@ -135,26 +154,20 @@ def interact(protocol, renderer = no_render, sender = no_send, state = None, xy 
 
         expr = [[protocol, state], xy]
         ops.reducer.reduce(expr)
-        # result = ops.unmake_expression(expr)
 
-        data = list(expr[0][1][0][1][0][0])
-        expr[0][1][0][1][0][0][:] = [()]
-
-        result = ops.unmake_expression(expr)
-
-        flag = result[0]
-        newstate = result[1][0]
-        # data = result[1][1][0]
-        assert result[1][1][1] == ()
+        flag = int(expr[0][0][0])
+        newstate = ops.unmake_expression(expr[0][1][0][0])
+        data = expr[0][1][0][1][0][0]
+        assert expr[0][1][0][1][0][1][0] == ()
         assert flag in [0, 1]
 
         if flag == 0:
             xyss = process_xyss_expr(data)
             renderer(xyss)
-            return (newstate, xyss)
+            return newstate
         else:
             state = newstate
-            data = ops.unmake_expression(data)
+            print("Intermediate state:", trim_state(state))
             xy = sender(data)
 
 def test():
@@ -178,90 +191,158 @@ def read_saved_states(infile = '../input/states'):
             states.append((name.strip(), value.strip()))
     return states
 
-def run():
-    g = galaxy.galaxy()
-    imagefile = '../images/out.png'
+def trim_state(state, full = False):
+    s = ops.tostring(ops.make_expression(state))
+    if full or (len(s) < 100):
+        return s
+    else:
+        return "[" + str(len(s)) +  " characters]" + s[:50] + ' ... ' + s[-50:]
 
-    def render(xyss):
-        save_with_imageio(xyss, imagefile)
-        display_image_with_feh(imagefile)
+class Runner:
+    def __init__(self):
+        self.g = galaxy.galaxy()
+        self.imagefile = '../images/out.png'
+        self.moviefile = None
+        self.movieframe = None
+        self.lastimagefile = self.imagefile
+        self.inmovie = False
+        self.state = [()]
+        self.xyss = []
 
-    saved_states = read_saved_states()
+    def renderer(self, xyss):
+        if self.inmovie:
+            f = self.moviefile.format(self.movieframe)
+            save_with_imageio(xyss, f)
+            self.lastimagefile = f
+            self.movieframe += 1
+        else:
+            save_with_imageio(xyss, self.imagefile)
+            self.lastimagefile = self.imagefile
 
-    state = ()
-    xyss = []
+        self.display()
+        self.xyss = xyss
 
-    while True:
-        prompt = '"<x> <y>" or (q)uit or (r)eset or show (s)tate or (e)dit state or show (c)oordinates or (d)isplay image:  '
-        try:
-            result = input(prompt).strip().lower()
-        except EOFError:
-            print("bye")
-            return
+    def sender(self, data):
+        print("Sending data to server:", ops.tostring(data))
+        response = send_to_test_server(data)
+        print("Server response:", ops.tostring(ops.make_expression(response)))
+        return response
 
-        if len(result) == 0:
-            continue
+    def mainloop(self):
+        prompt = '(q)uit (d)isplay (c)oordinates (s)tate (e)dit state (m)ovie (u)ndo  '
+        while True:
+            try:
+                result = input(prompt).strip().lower()
+            except EOFError:
+                self.quit()
+                return
 
-        if result[0] == 'q':
-            print("bye")
-            return
-
-        if result[0] == 'r':
-            print("resetting state to nil")
-            state = ()
-            continue
-
-        if result[0] == 'c':
-            for xys in xyss:
-                print(xys)
-            continue
-
-        if result[0] == 'd':
-            display_image_with_feh(imagefile)
-            continue
-
-        if result[0] == 's':
-            print("State:", ops.tostring(ops.make_expression(state)))
-            continue
-
-        if result[0] == 'e':
-            print("Saved states:")
-            for i in range(len(saved_states)):
-                name, value = saved_states[i]
-                print("    ({})    ".format(i), name, "    ", value)
-            print("    (c)ustom")
-
-            cmd = input("Select state, or (c)ustom:  ").strip().lower()
-            if len(cmd) == 0:
-                print("aborted")
+            if len(result) == 0:
                 continue
 
-            if cmd[0] == 'c':
-                value = input("Enter new state:  ").strip().lower()
-            else:
+            c = result[0]
+
+            if c == 'q':
+                self.quit()
+                return
+
+            if c == 'd':
+                self.display()
+            elif c == 'c':
+                for xys in self.xyss:
+                    print(xys)
+            elif c == 's':
+                self.show_state(True)
+            elif c == 'e':
+                self.edit_state()
+            elif c == 'm':
+                self.movie()
+            elif c == 'u':
+                self.undo()
+            elif c in '-0123456789':
                 try:
-                    value = saved_states[int(cmd)][1]
+                    x_, y_ = result.split()
+                    x = int(x_)
+                    y = int(y_)
                 except:
-                    print("Unknown input")
+                    print("Invalid coordinates")
                     continue
+                self.click(x, y)
+            else:
+                print("Unrecognized command")
 
-            state = ops.parse_list_expr(value)
-            continue
+    def quit(self):
+        print('bye')
 
-        x_, y_ = result.split()
-        x = int(x_)
-        y = int(y_)
+    def display(self):
+        display_image_with_feh(self.lastimagefile)
+
+    def show_state(self, full = False):
+        print("State:", trim_state(self.state[-1], full))
+
+    def edit_state(self):
+        saved_states = read_saved_states()
+
+        print("Saved states:")
+        for i in range(len(saved_states)):
+            name, value = saved_states[i]
+            print("    ({})    ".format(i), name, "    ", value)
+        print("    (c)ustom")
+
+        cmd = input("Select state, or (c)ustom:  ").strip().lower()
+        if len(cmd) == 0:
+            print("canceled")
+            return
+
+        if cmd[0] == 'c':
+            value = input("Enter new state:  ").strip().lower()
+        else:
+            try:
+                value = saved_states[int(cmd)][1]
+            except:
+                print("canceled")
+                return
 
         try:
-            state, xyss = interact(g, render, no_send, state, (x, y))
+            self.state.append(ops.parse_list_expr(value))
         except:
-            print("Encountered exception during interaction!")
+            print("invalid")
 
-        s = ops.tostring(ops.make_expression(state))
-        if len(s) < 100:
-            print("State:", s)
+    def movie(self):
+        if self.inmovie:
+            self.moviefile = None
+            self.movieframe = None
+            self.inmovie = False
         else:
-            print("State [", str(len(s)), "characters]:", s[:50], ' ... ', s[-50:])
+            cmd = input("Choose movie name:  ").strip()
+            if len(cmd) == 0:
+                print('canceled')
+                return
+            d = os.path.join('..', 'movies', cmd)
+            os.mkdir(d)
+            self.moviefile = str(os.path.join(d, 'f{:04d}.png'))
+            self.movieframe = 0
+            self.inmovie = True
+
+    def undo(self):
+        print("State history:")
+        for i in range(min(30, len(self.state))):
+            print("    ({})    ".format(i), trim_state(self.state[-i - 1]))
+        cmd = input("Select number of steps to rewind (0 does nothing):  ").strip().lower()
+        try:
+            idx = int(cmd)
+            if idx > 0 and idx < len(self.state):
+                self.state = self.state[:len(self.state) - idx]
+        except:
+            print("canceled")
+
+    def click(self, x, y):
+        newstate = interact(self.g, self.renderer, self.sender, self.state[-1], (x, y))
+        self.state.append(newstate)
+        self.show_state()
+
+def run():
+    Runner().mainloop()
 
 if __name__ == "__main__":
     run()
