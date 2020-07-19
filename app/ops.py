@@ -1,113 +1,394 @@
 import inspect
 
-# Representation of an expression
-# An expression is either a *term* or a list of length n where:
-#       [x1, ..., xn]
-# represents
-#       ap ap ... ap x1 x2 ... xn
-# In an expression, x1 must be a term, and x2 ... xn are expressions.
-#
-# A term is either an operator, a list, a literal, a variable, or maybe something else.
+# Expression is either
+#   [x] such that x :: Term
+#   [y, z] such that y, z :: Expr, representing "ap y z"
+# a Term either an Op or a Variable an integer or a tuple
+# tuple is either (), i.e., nil, or a pair of expressions
 
-class Expr:
-    def __init__(self, fun, arg = None):
-        self.set(fun, arg)
+def reduce1(expr):
+    args = []
+    parents = []
 
-    def set(self, fun, arg):
-        self.fun = fun
-        self.arg = arg
+    while len(expr) == 2:
+        args.append(expr[1])
+        parents.append(expr)
+        expr = expr[0]
 
-        if (arg is None) and (type(fun) is int):
-            self.reduce = self.noop
-            self.set = self.error
+    foo = expr[0]
+    if type(foo) is int:
+        return False
 
-    def noop(self):
+    # Now want to evaluate foo applied to args (reversed)
+    if isinstance(foo, tuple):
+        arity = 1
+        if len(args) >= 1:
+            if foo == ():
+                result = [true]
+            else:
+                result = [[args[-1], foo[0]], foo[1]]
+            parents[-arity][:] = result
+            return True
+    elif foo.can_apply():
+        arity = foo.arity
+        if arity == 0:
+            expr[:] = foo.apply()
+            return True
+        elif len(args) >= arity:
+            args = args[-arity:]
+
+            if foo.strict:
+                for e in args:
+                    if reduce1(e):
+                        return True
+
+            parents[-arity][:] = foo.apply(*args)
+            return True
+    return False
+
+class Reducer:
+    def __init__(self, maxdepth=10000):
+        self.reduce_targets = [None] * maxdepth
+        self.numargs = [None] * maxdepth
+
+    def reduce(self, expr):
+        progress = False
+
+        rt = self.reduce_targets
+        numargs = self.numargs
+
+        rt[0] = expr
+        numargs[0] = 0
+        idx = 0
+
+        while idx >= 0:
+            e = rt[idx]
+            # print("Reducing index", idx, tostring(e))
+
+            if len(e) == 2:
+                idx += 1
+                rt[idx] = e[0]
+                numargs[idx] = numargs[idx - 1] + 1
+            else:
+                foo = e[0]
+                if type(foo) is list:
+                    print("Unexpected list?", idx)
+                    tostring(foo)
+                    print(numargs[:idx + 1])
+                    print(e)
+
+                if type(foo) is int:
+                    assert numargs[idx] == 0
+                    idx -= 1
+                elif type(foo) is tuple:
+                    # arity = 1
+                    idx -= 1
+                    if numargs[idx + 1] >= 1:
+                        if foo == ():
+                            result = [true]
+                        else:
+                            result = [[rt[idx][1], foo[0]], foo[1]]
+                        rt[idx][:] = result
+                        progress = True
+                elif foo.can_apply():
+                    arity = foo.arity
+                    if arity == 0:
+                        e[:] = foo.apply()
+                        progress = True
+                    elif numargs[idx] >= arity:
+                        args = [e_[1] for e_ in rt[idx - arity : idx]]
+                        idx -= arity
+                        if foo.strict:
+                            rt[idx][:] = [DelayedApplication(foo, args)]
+                            for e_ in args:
+                                idx += 1
+                                rt[idx] = e_
+                                numargs[idx] = 0
+                        else:
+                            rt[idx][:] = foo.apply(*args)
+                            progress = True
+                    else:
+                        idx = idx - numargs[idx] - 1
+                else:
+                    # assert numargs[idx] == 0
+                    idx = idx - numargs[idx] - 1
+
+        return progress
+
+reducer = Reducer()
+
+class DelayedApplication:
+    def __init__(self, foo, args):
+        self.foo = foo
+        self.args = args
+        self.arity = 0
+        self.strict = False
+
+    def can_apply(self):
+        return True
+
+    def apply(self):
+        return self.foo.apply(*self.args)
+
+    def __str__(self):
+        return '[' + str(self.foo) + ' ; ' + str(self.args) + ' ]'
+
+    def __repr__(self):
+        return '[' + str(self.foo) + ' ; ' + str(self.args) + ' ]'
+
+def walk(expr, f0, f2):
+    memo = set()
+
+    stack = [expr]
+    while len(stack) > 0:
+        cur = stack.pop()
+        if id(cur) in memo:
+            f0([recursion])
+            continue
+        else:
+            memo.add(id(cur))
+
+        if len(cur) == 1:
+            f0(cur)
+        else:
+            f2(cur)
+            stack.append(cur[1])
+            stack.append(cur[0])
+
+def assign_symbol_references(expr, symbols):
+    def f0(cur):
+        if isinstance(cur[0], Variable) and (cur[0].name in symbols):
+            cur[0].reference = symbols[cur[0].name]
+    def f2(cur):
         pass
+    walk(expr, f0, f2)
 
-    def error(self, *args, **kwargs):
-        raise ValueError("internal error")
-
-    def reduce(self):
-        # Walk tree until we find a function that can be applied
-        args = []
-        trees = []
-
-        while not (self.arg is None):
-            args.append(self.arg)
-            trees.append(self)
-            self = self.fun
-
-        fun = self.fun
-        arity = fun.arity
-
-        # If we ended up at a symbol, substitute
-
-        if isinstance(fun, Literal):
-            if len(args) > 0:
-                trees[-1].fun = fun.reference
+def serialize_strict_list(l, terms):
+    if l == ():
+        terms.append('()')
+    else:
+        terms.append('(')
+        while l != ():
+            head, tail = l
+            if len(head) == 1:
+                if type(head[0]) is tuple:
+                    serialize_strict_list(head[0], terms)
+                else:
+                    terms.append(str(head[0]))
             else:
-                self.replace_with(fun.reference)
-            return True
-        elif arity <= len(args):
-            result = fun.apply(*args[-arity:])
-            if not (result is None):
-                trees[-arity].replace_with(result)
-            return True
+                terms.append(tostring(head))
+
+            terms.append(',')
+            if len(tail) == 1:
+                if type(tail[0]) is tuple:
+                    l = tail[0]
+                else:
+                    terms.append(str(tail[0]))
+                    break
+            else:
+                terms.append(tostring(tail))
+                break
+        terms.append(')')
+
+def tostring(expr):
+    ap = 'ap'
+    terms = []
+    def f0(cur):
+        if type(cur[0]) is tuple:
+            serialize_strict_list(cur[0], terms)
         else:
-            return False
+            terms.append(str(cur[0]))
+    def f2(cur):
+        terms.append(ap)
 
-    def replace_with(self, other):
-        if isinstance(other, Expr):
-            self.set(other.fun, other.arg)
+    walk(expr, f0, f2)
+    return ' '.join(terms)
+
+class RecursionSymbol:
+    def __init__(self):
+        self.name = '(recursed)'
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.name
+
+recursion = RecursionSymbol()
+
+class Variable:
+    def __init__(self, name):
+        self.name = name
+        self.reference = None
+        self.arity = 0
+        self.strict = False
+
+    def can_apply(self):
+        return not (self.reference is None)
+
+    def apply(self):
+        return self.reference
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.name
+
+class Op:
+    def __init__(self, name, apply, strict = True):
+        self.name = name
+        self.apply = apply
+        self.arity = len(inspect.getargspec(apply)[0])
+        self.strict = strict
+
+    def can_apply(self):
+        return True
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.name
+
+def _inc(a):
+    return [a[0] + 1]
+def _dec(a):
+    return [a[0] - 1]
+def _add(b, a):
+    return [a[0] + b[0]]
+def _mul(b, a):
+    return [a[0] * b[0]]
+def _div(b, a):
+    a = a[0]
+    b = b[0]
+    if a == 0:
+        return [0]
+    if (a > 0) == (b > 0):
+        return [a // b]
+    else:
+        return [-(abs(a) // abs(b))]
+def _eq(b, a):
+    if a[0] == b[0]:
+        return [true]
+    if (type(a[0]) == int) or (type(b[0]) == int):
+        return [false]
+    raise ValueError("Don't know how to compute equality of {} and {}".format(a, b))
+
+def _lt(b, a):
+    if a[0] < b[0]:
+        return [true]
+    else:
+        return [false]
+
+def _neg(a):
+    return [-a[0]]
+
+def _pwr2(a):
+    return [2 ** a[0]]
+
+def _true(b, a):
+    return a
+
+def _false(b, a):
+    return b
+
+def _S(z, y, x):
+    return [[x, z], [y, z]]
+
+def _C(z, y, x):
+    return [[x, z], y]
+
+def _B(z, y, x):
+    return [x, [y, z]]
+
+def _I(x):
+    return x
+
+def _cons_strict(y, x):
+    return [(x, y)]
+    # if type(y[0]) is tuple:
+        # return [(x, y)]
+    # return [[[cons_lazy], x], y]
+
+def _cons(z, y, x):
+    return [[z, x], y]
+
+def _nil(x):
+    return [true]
+
+def _nil_strict():
+    return [()]
+
+def _car_strict(x):
+    if type(x[0]) is tuple:
+        if x[0] == ():
+            return [true]
         else:
-            self.set(other, None)
+            return x[0][0]
+    else:
+        return [x, [true]]
 
-    # Left-side first
-    def walk(self, f0, f2, accum):
-        stack = [self]
-        while len(stack) > 0:
-            cur = stack.pop()
+def _car(x):
+    return [x, [true]]
 
-            if cur.arg is None:
-                f0(cur, accum)
-            else:
-                f2(cur, accum)
-                stack.append(cur.arg)
-                stack.append(cur.fun)
+def _cdr_strict(x):
+    if type(x[0]) is tuple:
+        if x[0] == ():
+            return [true]
+        else:
+            return x[0][1]
+    else:
+        return [x, [false]]
 
-        return accum
+def _cdr(x):
+    return [x, [false]]
 
-    def assign_symbol_references(self, symbols):
-        def f0(cur, accum):
-            if isinstance(cur.fun, Literal):
-                cur.fun.reference = symbols[cur.fun.data]
-        def f2(cur, accum):
-            pass
+def _isnil(x):
+    # Because isnil is strict, if the argument is "nil" it will have been
+    # reduced to () already
+    if x[0] == ():
+        return [true]
+    else:
+        return [false]
 
-        self.walk(f0, f2, None)
+true = Op('t', _true, strict = False)
+false = Op('f', _false, strict = False)
+identity = Op('i', _I, strict = False)
+nil = Op('nil', _nil_strict, strict = False)
+cons = Op('cons', _cons_strict)
+cons_lazy = Op('cons_lazy', _cons, strict = False)
+car = Op('car', _car_strict)
+car_lazy = Op('car_lazy', _car, strict = False)
+cdr = Op('cdr', _cdr_strict)
+cdr_lazy = Op('cdr_lazy', _cdr, strict = False)
 
-    def tostring(self):
-        ap = 'ap'
-        terms = []
-        def f0(cur, accum):
-            if type(cur.fun) is int:
-                terms.append(str(cur.fun))
-            else:
-                terms.append(cur.fun.name)
+all_ops = [
+        true,
+        false,
+        nil,
+        cons,
+        identity,
+        car,
+        cdr,
+        Op('inc', _inc),
+        Op('dev', _dec),
+        Op('add', _add),
+        Op('mul', _mul),
+        Op('div', _div),
+        Op('eq', _eq),
+        Op('lt', _lt),
+        Op('neg', _neg),
+        Op('pwr2', _pwr2),
+        Op('s', _S, strict = False),
+        Op('c', _C, strict = False),
+        Op('b', _B, strict = False),
+        Op('isnil', _isnil)
+    ]
 
-        def f2(cur, accum):
-            terms.append(ap)
-
-        self.walk(f0, f2, None)
-        return ' '.join(terms)
-
-    def size(self):
-        count = [0]
-        def f(cur, accum):
-            count[0] += 1
-
-        self.walk(f, f, None)
-        return count[0]
+name2op = {}
+for op in all_ops:
+    name2op[op.name] = op
 
 def readname(name):
     if name in name2op:
@@ -116,233 +397,18 @@ def readname(name):
         try:
             return int(name)
         except:
-            return Literal(name, name)
+            return Variable(name)
 
-def readexpression(line):
-    parts = reversed(line.split())
+def readexpression(text):
+    ap = 'ap'
+    terms = reversed(text.split())
     stack = []
-    for part in parts:
-        if part == 'ap':
+    for term in terms:
+        if term == ap:
             x = stack.pop()
             y = stack.pop()
-            stack.append(ap(x, y))
+            stack.append([x, y])
         else:
-            stack.append(Expr(readname(part)))
-
+            stack.append([readname(term)])
     assert len(stack) == 1
     return stack[0]
-
-def ap(a, b):
-    return Expr(a, b)
-
-def no_apply(*args, **kwargs):
-    raise ValueError("Cannot 'apply' that")
-
-class Op:
-    def __init__(self, name, apply, arity = None):
-        if arity is None:
-            arity = len(inspect.getargspec(apply)[0])
-
-        self.name = name
-        self.apply = apply
-        self.arity = arity
-
-class Literal:
-    def __init__(self, name, data):
-        # self.name = name
-        self.name = str(data)
-        self.data = data
-        self.arity = 999999
-        self.apply = no_apply
-        self.reference = None
-
-#######
-# In each function below, arguments are given in *reverse* order!
-#######
-
-def ap_inc(a):
-    if not a.reduce():
-        return a.fun + 1
-
-def ap_dec(a):
-    if not a.reduce():
-        return a.fun - 1
-
-def ap_add(b, a):
-    if not (a.reduce() or b.reduce()):
-        return a.fun + b.fun
-
-def ap_mul(b, a):
-    if not (a.reduce() or b.reduce()):
-        return a.fun * b.fun
-
-def ap_div(b, a):
-    if not (a.reduce() or b.reduce()):
-        a = a.fun
-        b = b.fun
-        if a == 0:
-            return 0
-        if (a > 0) == (b > 0):
-            return a // b
-        else:
-            return -(abs(a) // abs(b))
-
-def ap_eq(b, a):
-    if not (a.reduce() or b.reduce()):
-        a = a.fun
-        b = b.fun
-        if a is b:
-            return true
-        if a == b:
-            return true
-        if (type(a) == int) or (type(b) == int):
-            return false
-        raise ValueError("Don't know how to compute equality of {} and {}".format(a, b))
-
-def ap_lt(b, a):
-    if not (a.reduce() or b.reduce()):
-        a = a.fun
-        b = b.fun
-        if a < b:
-            return true
-        else:
-            return false
-
-def ap_neg(a):
-    if not a.reduce():
-        return -a.fun
-
-def ap_pwr2(x):
-    if not a.reduce():
-        return 2 ** a
-
-def ap_true(b, a):
-    return a
-
-def ap_false(b, a):
-    return b
-
-class Modulated:
-    def __init__(self, data):
-        self.data = data
-        self.name = 'modulated_data'
-        self.arity = 0
-        self.apply = no_apply
-
-
-def ap_mod(x):
-    return Modulated(x)
-
-def ap_dem(x):
-    if not x.reduce():
-        assert isinstance(x.fun, Modulated)
-        return x.fun.data
-
-def ap_S(z, y, x):
-    return ap(ap(x, z), ap(y, z))
-
-def ap_C(z, y, x):
-    return ap(ap(x, z), y)
-
-def ap_B(z, y, x):
-    return ap(x, ap(y, z))
-
-def ap_I(x):
-    return x
-
-class Cons:
-    def __init__(self, a, b):
-        self.head = a
-        self.tail = b
-        self.name = 'cons'
-        self.eager = True
-        self.arity = 1
-
-    def __add__(self, xs):
-        return (self, *xs)
-
-    def apply(self, x):
-        return x + (self.head, self.tail)
-
-def ap_cons_old(x, y):
-    return Cons(x, y)
-
-def ap_cons(z, y, x):
-    return ap(ap(z, x), y)
-
-def ap_nil(x):
-    return true
-
-def ap_car_old(x):
-    if x is nil:
-        return true
-    elif isinstance(x, Cons):
-        return x.head
-    else:
-        return x + (true,)
-
-def ap_cdr_old(x):
-    if x is nil:
-        return true
-    elif isinstance(x, Cons):
-        return x.tail
-    else:
-        return x + (false,)
-
-def ap_isnil_old(x):
-    if x is nil:
-        return true
-    elif isinstance(x, Cons):
-        return false
-    elif isinstance(x, tuple) and (x[0] is cons) and (len(x) == 3):
-        return false
-    else:
-        raise ValueError("Can't apply isnil to that")
-
-def ap_car(x):
-    return ap(x, Expr(true))
-
-def ap_cdr(x):
-    return ap(x, Expr(false))
-
-def ap_isnil(x):
-    if not x.reduce():
-        if x is nil:
-            return true
-        else:
-            return false
-
-true = Op('t', ap_true)
-false = Op('f', ap_false)
-nil = Op('nil', ap_nil)
-cons = Op('cons', ap_cons)
-
-all_ops = [
-        true,
-        false,
-        nil,
-        cons,
-        Op('inc', ap_inc),
-        Op('dev', ap_dec),
-        Op('add', ap_add),
-        Op('mul', ap_mul),
-        Op('div', ap_div),
-        Op('eq', ap_eq),
-        Op('lt', ap_lt),
-        Op('neg', ap_neg),
-        Op('pwr2', ap_pwr2),
-        Op('mod', ap_mod),
-        Op('dem', ap_dem),
-        Op('s', ap_S),
-        Op('c', ap_C),
-        Op('b', ap_B),
-        Op('i', ap_I),
-        Op('nil', ap_nil),
-        Op('car', ap_car),
-        Op('cdr', ap_cdr),
-        Op('isnil', ap_isnil)
-    ]
-
-name2op = {}
-for op in all_ops:
-    name2op[op.name] = op

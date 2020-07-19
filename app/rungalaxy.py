@@ -12,16 +12,16 @@ def read_galaxy(infile = '../input/galaxy.txt'):
                 symbols[a] = ops.readexpression(c)
 
     for s in symbols:
-        symbols[s].assign_symbol_references(symbols)
+        ops.assign_symbol_references(symbols[s], symbols)
     return symbols
 
 
-def print_expression(e):
-    text = e.tostring()
-    if len(text) < 50:
+def print_expression(e, M = 185):
+    text = ops.tostring(e)
+    if len(text) < M:
         return text
     else:
-        return text[:20] + ' ... ' + text[-20:]
+        return text[:(M // 2)] + ' ... ' + text[-(M // 2):] + ' [' + str(len(text)) + ']'
 
 def print_all_symbols(symbols):
     for s in symbols:
@@ -32,8 +32,8 @@ def reduce_all_symbols(symbols):
 
     for s in symbols:
         text = print_expression(symbols[s])
-        if symbols[s].reduce():
-            print(s, text)
+        print(s, text)
+        if ops.reducer.reduce(symbols[s]):
             print('    = ', print_expression(symbols[s]))
             count += 1
 
@@ -49,7 +49,7 @@ def repeatedly_reduce(symbols, limit = 20):
 
         for s in sorted(list(valid)):
             text = print_expression(symbols[s])
-            if symbols[s].reduce():
+            if ops.reducer.reduce(symbols[s]):
                 print(s, text)
                 print('    = ', print_expression(symbols[s]))
                 count += 1
@@ -61,11 +61,26 @@ def repeatedly_reduce(symbols, limit = 20):
         if count == 0:
             break
 
+def evaluate_galaxy():
+    symbols = read_galaxy('../input/ap_galaxy.txt')
+
+    # result0 = ap ap galaxy nil ap ap cons 0 0
+    s = symbols['result0']
+    print(print_expression(s, 5000))
+    while ops.reducer.reduce(s):
+        print(print_expression(s, 5000))
 
 def test():
-    symbols = read_galaxy()
-    # reduce_all_symbols(symbols)
+    symbols = read_galaxy() #'../input/test.txt')
+    d = {
+            ':1096' : symbols[':1096'],
+            ':1199' : symbols[':1199'],
+            ':1201' : symbols[':1201'],
+            ':1202' : symbols[':1202']
+            }
+    print_all_symbols(symbols)
     repeatedly_reduce(symbols, 1000)
 
 if __name__ == "__main__":
-    test()
+    # test()
+    evaluate_galaxy()
