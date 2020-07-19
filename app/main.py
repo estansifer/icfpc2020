@@ -5,7 +5,7 @@ import modem
 
 test_url = 'https://icfpc2020-api.testkontur.ru/aliens/send'
 server_url = sys.argv[1]
-player_key = sys.argv[2]
+player_key = int(sys.argv[2])
 
 def join_request():
     return (2, (player_key, ()))
