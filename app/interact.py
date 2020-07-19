@@ -2,6 +2,7 @@ import subprocess
 import requests
 import os
 import os.path
+import readline
 
 import galaxy
 import modem
