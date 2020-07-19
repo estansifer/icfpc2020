@@ -110,21 +110,30 @@ class GalaxyPadUI:
         self.on_click = on_click
 
     def __call__(self, event):
-        coord = (int(event.xdata), int(event.ydata))
+        import matplotlib.pyplot as plt
+        coord = (int(round(event.xdata)), int(round(event.ydata)))
+        plt.close()
         self.on_click(*coord)
         print('click', coord)
 
 def plot_with_matplotlib(image, xyss, on_click):
+    import matplotlib
     import matplotlib.pyplot as plt
+    from pylab import get_current_fig_manager
 
+    matplotlib.use("TkAgg")
+    plt.ion()
     fig, ax = plt.subplots()
     xm, xM, ym, yM = get_extent(xyss)
     im = ax.imshow(image, interpolation='none',
                    origin='lower',
                    extent=[-xM-0.5, xM+0.5, -yM-0.5, yM+0.5])
+    ax.set_ylim(ax.get_ylim()[::-1])  # flip y-axis
     galaxy_pad = GalaxyPadUI(im, on_click)
+    # fix window location
+    thismanager = get_current_fig_manager()
+    thismanager.window.wm_geometry("+100+50")
     plt.show()
-    return galaxy_pad
 
 def no_render(xyss):
     print("Cannot draw image!")
