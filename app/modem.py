@@ -15,12 +15,10 @@ def mod_int(n):
 def mod(o):
     if type(o) is int:
         return mod_int(o)
+    elif o == ():
+        return '00'
     else:
-        parts = ['11']
-        for x in o:
-            parts.append(mod(x))
-        parts.append('00')
-        return ''.join(parts)
+        return '11' + mod(o[0]) + mod(o[1])
 
 def dem(s):
     i = [0]
@@ -44,20 +42,21 @@ def dem(s):
 
         return x
 
-    def dem_list():
+    def dem_cons():
         i[0] += 2
 
-        xs = []
-        while s[i[0] : i[0] + 2] != '00':
-            xs.append(dem_obj())
+        a = dem_obj()
+        b = dem_obj()
 
-        i[0] += 2
-
-        return xs
+        return (a, b)
 
     def dem_obj():
-        if s[i[0] : i[0] + 2] == '11':
-            return dem_list()
+        b2 = s[i[0] : i[0] + 2]
+        if b2 == '11':
+            return dem_cons()
+        elif b2 == '00':
+            i[0] += 2
+            return ()
         else:
             return dem_int()
 
