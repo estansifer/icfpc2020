@@ -22,6 +22,9 @@ def post(data, test = False):
 def main():
     print('A')
     jr = join_request()
+    print('Player key:', player_key)
+    print('Player key type:', type(player_key))
+    print('Join request:', jr)
     response = post(jr)
     print('B', response)
 
