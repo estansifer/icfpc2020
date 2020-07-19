@@ -20,7 +20,7 @@ def join_request(key):
     return (2, (key, ((), ())))
 
 def start_request(key):
-    xs = (0, (0, (0, (128, ()))))
+    xs = (32, (0, (32, (1, ()))))
     return (3, (key, (xs, ())))
 
 def issue_commands(key):
