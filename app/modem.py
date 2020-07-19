@@ -64,3 +64,6 @@ def dem(s):
 
 def test(o):
     print(o, mod(o), dem(mod(o)))
+
+test((1, 0))
+test((1, (0, ())))
