@@ -9,7 +9,7 @@ if local:
     import secret
     test_url = 'https://icfpc2020-api.testkontur.ru/aliens/send?apiKey=' + secret.apikey
 else:
-    server_url = sys.argv[1]
+    server_url = sys.argv[1] + '/aliens/send'
     player_key = int(sys.argv[2])
 
 
@@ -30,9 +30,9 @@ def post(data):
     m = modem.mod(data)
     print("Sending:", data, m)
     if local:
-        response = requests.post(test_url, data = modem.mod(data))
+        response = requests.post(test_url, data = m)
     else:
-        response = requests.post(server_url, data = modem.mod(data))
+        response = requests.post(server_url, data = m)
     if response.status_code != 200:
         print("Status code:", response.status_code)
     d = modem.dem(response.text)
@@ -73,6 +73,8 @@ def main_local():
 
 
 def main_submission():
+    print("Server:", server_url)
+    print("Player key:", player_key)
     play(None, player_key)
 
 def main():
