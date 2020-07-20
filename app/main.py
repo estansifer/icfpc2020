@@ -12,7 +12,6 @@ else:
     server_url = sys.argv[1] + '/aliens/send'
     player_key = int(sys.argv[2])
 
-
 def create_request():
     return (1, (0, ()))
 

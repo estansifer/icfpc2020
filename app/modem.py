@@ -40,7 +40,10 @@ def dem(s):
         x = int(s[i[0] : i[0] + length], base = 2)
         i[0] += length
 
-        return x
+        if neg:
+            return -x
+        else:
+            return x
 
     def dem_cons():
         i[0] += 2
